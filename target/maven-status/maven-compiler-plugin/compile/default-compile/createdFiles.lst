@@ -1,0 +1,4 @@
+service\Log.class
+service\LoggingService.class
+service\InputData.class
+service\ResultObject.class
