@@ -2,6 +2,9 @@ package service;
 
 import util.*;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -29,12 +32,14 @@ import org.apache.geode.cache.query.SelectResults;
 import org.apache.geode.cache.query.TypeMismatchException;
 import org.apache.geode.pdx.ReflectionBasedAutoSerializer;
 
+import com.mysql.jdbc.PreparedStatement;
+import com.mysql.jdbc.Statement;
 import com.sun.jersey.spi.resource.Singleton;
 
 /**
  * @author reeta
  * This is the class which invoked when REST call is made
- * This class implements all the methods of logging
+ * This class implements all t  he methods of logging
  */
 @Path("/logging")
 @Singleton
@@ -48,6 +53,7 @@ public class LoggingService
 	static final String EVENT_LOG = "Event";
 	static final String POLICY_LOG = "Policy";
 	static final String DEVICE_LOG = "Device";
+	static Connection conn = null;	
 	
 	
 	static
@@ -62,6 +68,13 @@ public class LoggingService
 		
 		DatabaseService.getDBCollection();
 		Thread.sleep(10000);
+		
+		//CONNECT TO MYSQL
+		
+		Class.forName("com.mysql.jdbc.Driver");
+			
+		conn = DriverManager.getConnection("jdbc:mysql://localhost/LOGGING?" + 
+				"user=root&password=reeta");
 		}
 		catch(Exception e)
 		{
@@ -531,6 +544,17 @@ public class LoggingService
 				else
 				{
 					int successfullInsert = 0;
+					String sql = "INSERT INTO UNDO_LOG (tid, lsn, flushed)" + "VALUES (?, ?, ?)";
+					for(int i=0;i<logs.size();i++)
+					{
+						java.sql.PreparedStatement preparedStatement = conn.prepareStatement(sql);
+						
+						preparedStatement.setString(1, logs.get(i).tid.toString());
+						preparedStatement.setString(2, logs.get(i).lsn.toString());
+						preparedStatement.setBoolean(3, false);
+						
+						preparedStatement.executeUpdate(); 
+					}
 					
 					for(int i=0;i<logs.size();i++)
 					{
@@ -557,6 +581,7 @@ public class LoggingService
 						}
 						
 						System.out.println("Mongo input" + dataInputToMongo);
+						
 						int insertCount = DatabaseService.flush_logs(dataInputToMongo);
 						System.out.println(insertCount);
 						if(insertCount >=0)
@@ -579,11 +604,13 @@ public class LoggingService
 						resultObject.success = true;
 						resultObject.message = "Successfully flushed " + successfullInsert + " entries";
 					}
+					make_transaction_atomic(inputData.tid.toString());
 				}
 
 			}
 			catch (Exception e)
 			{
+				
 				e.printStackTrace();
 				resultObject.message ="Erorr enountered in flush -" + e.getLocalizedMessage();
 			}	
@@ -593,6 +620,48 @@ public class LoggingService
 			resultObject.message = "Provide tid to commit";
 		}
 		return resultObject;
+	}
+	
+	void make_transaction_atomic(String tid)
+	{
+		 String query = "SELECT * FROM UNDO_LOG WHERE tid = " + "'" + tid +"'";
+		 try
+		 {
+			 // create the java statement
+			 java.sql.Statement st = conn.createStatement();
+	      
+			 // execute the query, and get a java resultset
+			 java.sql.ResultSet rs = st.executeQuery(query);
+	      
+			 // iterate through the java resultset
+			 List <String> lsn_list = new ArrayList();
+			 while (rs.next())
+			 {
+				 String lsn = rs.getString("lsn");
+				 System.out.format("%s", lsn);
+				 lsn_list.add(lsn);
+			 }
+			 st.close();
+			 Boolean success = true;
+			 for(String lsn:lsn_list)
+			 {
+				 try
+				 {
+					 String mong_delete_query = "{" + "lsn" + ":" + "'" + lsn + "'" + "}";
+					 System.out.println("Deleting from mongo - " + mong_delete_query);
+					 DatabaseService.delete_db_object(mong_delete_query);
+				 }
+				 catch(Exception e1)
+				 {
+					 success = false;
+					 e1.printStackTrace();
+				 }
+			 }
+		 }
+		 catch(Exception e)
+		 {
+			 e.printStackTrace();
+		 }
 	}
 	
 	@DELETE
@@ -712,15 +781,26 @@ public class LoggingService
 				queries.add(inputdata.logtype.toString() );
 			}
 			String newPayloadJsonString =null;
+			String payloadJsonString = null;
 			if(inputdata.payload !=null && inputdata.payload.length() > 0)
 			{
 				hasPayload = true;
+				
 				try
 				{
 					Object payLoadObject = SimpleUtil.XML_to_Object(inputdata.payload);
-					String payloadJsonString = SimpleUtil.convert_object_to_JSON(payLoadObject);
-					System.out.println(payloadJsonString);
-					newPayloadJsonString = payloadJsonString.substring(1,payloadJsonString.length()-1 );
+					if(payLoadObject instanceof Integer)
+					{
+						queries.add("payload");
+						queries.add(inputdata.payload.toString());
+						newPayloadJsonString = null;
+					}
+					else
+					{
+						payloadJsonString = SimpleUtil.convert_object_to_JSON(payLoadObject);
+						System.out.println(payloadJsonString);
+						newPayloadJsonString = payloadJsonString.substring(1,payloadJsonString.length()-1 );
+					}
 
 				} 
 				catch (IllegalArgumentException  e)
@@ -744,7 +824,7 @@ public class LoggingService
 
 			if(myJsonstring.length() > 0)
 			{
-				if(hasPayload == true)
+				if(hasPayload == true && newPayloadJsonString !=null)
 				{
 					finalString = "{ " +  myJsonstring + " , " + newPayloadJsonString + " }";
 				}
@@ -755,7 +835,7 @@ public class LoggingService
 			}
 			else
 			{
-				if(hasPayload == true)
+				if(hasPayload == true && newPayloadJsonString !=null)
 				{
 					finalString =  "{ " + newPayloadJsonString +" }";
 				}
