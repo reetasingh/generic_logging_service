@@ -7,7 +7,11 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import javax.ws.rs.GET;
@@ -626,7 +630,13 @@ public class LoggingService
 		return resultObject;
 	}
 	
-	static void make_transaction_atomic(String tid)
+	
+	/**
+	 * @param tid
+	 * If flushed = false, it means transaction did not commit properly
+	 * Remove all the partial entries belonging to this transaction from mongo db database
+	 */
+	private static void make_transaction_atomic(String tid)
 	{
 		System.out.println("Making transaction atomic");
 		 String query = "SELECT * FROM UNDO_LOG WHERE tid = " + "'" + tid +"'" + "AND flushed = false";
@@ -670,7 +680,11 @@ public class LoggingService
 		 }
 	}
 	
-	static void update_tran_status(String tid)
+	/**
+	 * @param tid
+	 * This method updates the flushed attribute to inform that the transaction is successfully flushed to disk or compleetly aborted
+	 */
+	private static void update_tran_status(String tid)
 	{
 			System.out.println("Updating transaction flushed to true");
 			String sql = "UPDATE UNDO_LOG SET flushed = true WHERE tid = " + "'" + tid +"'" ;
@@ -958,8 +972,9 @@ public class LoggingService
 	@Path("/query")
 	@Produces(MediaType.APPLICATION_JSON)
 	@Consumes(MediaType.APPLICATION_JSON)
-	public List<Log> query_main(InputData inputdata) throws ClassNotFoundException
+	public Set<Log> query_main(InputData inputdata) throws ClassNotFoundException
 	{
+		Set<Log> result_logs = new HashSet();
 		List<Log> logs = new ArrayList();
 		List<Log> memory_logs = new ArrayList();
 		if(inputdata != null)
@@ -998,7 +1013,16 @@ public class LoggingService
 				}
 			}
 		}
-		return logs;
+		Map<String, Log> map = new HashMap();
+		for(Log log:logs)
+		{
+			if(!(map.containsKey(log.lsn)))
+			{
+				map.put(log.lsn, log);
+			}
+		}
+		result_logs.addAll(map.values());
+		return result_logs;
 	}
 	
 	private void save_to_main_memory(List<Log> logs)
