@@ -75,6 +75,7 @@ public class LoggingService
 			
 		conn = DriverManager.getConnection("jdbc:mysql://localhost/LOGGING?" + 
 				"user=root&password=reeta");
+		cleanup_service();
 		}
 		catch(Exception e)
 		{
@@ -89,6 +90,7 @@ public class LoggingService
 	}
 
 
+	
 	public static Cache getCache()
 	{
 		if (cache == null) {
@@ -547,6 +549,7 @@ public class LoggingService
 					String sql = "INSERT INTO UNDO_LOG (tid, lsn, flushed)" + "VALUES (?, ?, ?)";
 					for(int i=0;i<logs.size();i++)
 					{
+						System.out.println("Logging tid on mysql");
 						java.sql.PreparedStatement preparedStatement = conn.prepareStatement(sql);
 						
 						preparedStatement.setString(1, logs.get(i).tid.toString());
@@ -603,16 +606,17 @@ public class LoggingService
 					{
 						resultObject.success = true;
 						resultObject.message = "Successfully flushed " + successfullInsert + " entries";
+						update_tran_status(inputData.tid.toString());
 					}
-					make_transaction_atomic(inputData.tid.toString());
+					
 				}
-
 			}
 			catch (Exception e)
 			{
 				
 				e.printStackTrace();
 				resultObject.message ="Erorr enountered in flush -" + e.getLocalizedMessage();
+				make_transaction_atomic(inputData.tid.toString());
 			}	
 		}
 		else
@@ -622,9 +626,10 @@ public class LoggingService
 		return resultObject;
 	}
 	
-	void make_transaction_atomic(String tid)
+	static void make_transaction_atomic(String tid)
 	{
-		 String query = "SELECT * FROM UNDO_LOG WHERE tid = " + "'" + tid +"'";
+		System.out.println("Making transaction atomic");
+		 String query = "SELECT * FROM UNDO_LOG WHERE tid = " + "'" + tid +"'" + "AND flushed = false";
 		 try
 		 {
 			 // create the java statement
@@ -657,11 +662,27 @@ public class LoggingService
 					 e1.printStackTrace();
 				 }
 			 }
+			 update_tran_status(tid);
 		 }
 		 catch(Exception e)
 		 {
 			 e.printStackTrace();
 		 }
+	}
+	
+	static void update_tran_status(String tid)
+	{
+			System.out.println("Updating transaction flushed to true");
+			String sql = "UPDATE UNDO_LOG SET flushed = true WHERE tid = " + "'" + tid +"'" ;
+			
+			
+			try {
+				java.sql.Statement preparedStatement = conn.createStatement();
+				preparedStatement.execute(sql);
+			} catch (SQLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}	
 	}
 	
 	@DELETE
@@ -989,6 +1010,39 @@ public class LoggingService
 		}
 	}
 	
+
+	private static void cleanup_service() 
+	{
+		 System.out.println("Calling cleanup service");
+		 String query = "SELECT distinct tid FROM UNDO_LOG WHERE flushed = false";
+		 try
+		 {
+			 // create the java statement
+			 java.sql.Statement st = conn.createStatement();
+	      
+			 // execute the query, and get a java resultset
+			 java.sql.ResultSet rs = st.executeQuery(query);
+	      
+			 // iterate through the java resultset
+			 List <String> tid_list = new ArrayList();
+			 while (rs.next())
+			 {
+				 String tid = rs.getString("tid");
+				 tid_list.add(tid);
+			 }
+			 System.out.println("To clean up - " + tid_list.size());
+			 for (String tid:tid_list)
+			 {
+				 make_transaction_atomic(tid);
+			 }
+			 st.close();
+		 }
+		 catch(Exception e)
+		 {
+			 e.printStackTrace();
+		 }
+	}
+
 	private List<Log> query_log_memory(InputData inputdata) {
 		List<Log> logs = new ArrayList();
 		String output = "query logs";
@@ -1323,5 +1377,6 @@ public class LoggingService
 		}
 		return resultObject;
 	}
+
 
 }
