@@ -1,16 +1,7 @@
-service\GenericJson.class
-service\DatabaseService.class
 com\payload_XML\generatedclasses\ObjectFactory.class
 com\payload_XML\generatedclasses\Shiporder$Shipto.class
-Testing.class
-util\SimpleUtil.class
-service\LoggingService.class
-service\InputData.class
 com\payload_json\generatedclasses\Address.class
-service\ResultObject.class
 com\payload_XML\generatedclasses\Shiporder$Item.class
-service\Log.class
-service\SuperResultObject.class
 com\payload_XML\generatedclasses\Student.class
 com\payload_XML\generatedclasses\Employee.class
 com\payload_XML\generatedclasses\Shiporder.class

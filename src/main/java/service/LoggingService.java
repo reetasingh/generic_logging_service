@@ -1434,6 +1434,6 @@ public class LoggingService
 		}
 		return resultObject;
 	}
-
+	
 
 }
