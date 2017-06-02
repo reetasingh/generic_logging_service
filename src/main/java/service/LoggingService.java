@@ -418,24 +418,28 @@ public class LoggingService
 						cont = false;
 					}
 				} 
-				catch (FunctionDomainException e) {
+				catch (Exception e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
-				} catch (TypeMismatchException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				} catch (NameResolutionException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				} catch (QueryInvocationTargetException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					cont =false;
+					result.success = false;
+					result.message = e.getLocalizedMessage();
+					return result;
 				}
 			}
 			while(cont == true);
 			System.out.println("Records to flush" + logs.size());
 			int successfullInsert = 0;
 			result.success = true;
+			
+			//flush log of logs to disk first
+			if(flush_lsns_to_disk(inputData.lsn.toString(),logs) == false)
+			{
+				result.success = false;
+				result.message = "Exception in flushing log of logs to disk";
+			}
+			
+			
 			for(int i=logs.size()-1;i>=0;i--)
 			{
 				String payLoadJson =null;
@@ -481,8 +485,9 @@ public class LoggingService
 				{
 					// TODO Auto-generated catch block
 					e.printStackTrace();
+					make_transaction_atomic(inputData.lsn.toString());
 					result.success = false;
-					result.message = e.getLocalizedMessage();
+					result.message = e.getLocalizedMessage();	
 					return result;
 				}	
 			}
@@ -490,6 +495,11 @@ public class LoggingService
 			{
 				result.success = true;
 				result.message = "Successfully flushed " + logs.size() + " entries";
+				update_tran_status(inputData.lsn.toString());
+			}
+			else
+			{
+				make_transaction_atomic(inputData.lsn.toString());
 			}
 		}
 		else
@@ -497,6 +507,33 @@ public class LoggingService
 			result.message = "Provide lsn";
 		}
 		return result;	
+	}
+	
+	private boolean flush_lsns_to_disk(String key , List <Log> logs)
+	{
+		//First insert lsns that need to be flushed in mysql
+		String sql = "INSERT INTO UNDO_LOG (tid, lsn, flushed)" + "VALUES (?, ?, ?)";
+		
+		for(int i=0;i<logs.size();i++)
+		{
+			System.out.println("Logging  lsns on mysql");
+			
+			
+			try {
+				java.sql.PreparedStatement preparedStatement = conn.prepareStatement(sql);
+				preparedStatement.setString(1, key);
+				preparedStatement.setString(2, logs.get(i).lsn.toString());
+				preparedStatement.setBoolean(3, false);
+				preparedStatement.executeUpdate(); 
+				
+			} catch (SQLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				return false;
+			}
+			
+		}
+		return true;
 	}
 
 	/**
@@ -550,17 +587,12 @@ public class LoggingService
 				else
 				{
 					int successfullInsert = 0;
-					String sql = "INSERT INTO UNDO_LOG (tid, lsn, flushed)" + "VALUES (?, ?, ?)";
-					for(int i=0;i<logs.size();i++)
+					
+					//flush lsns to disk. this makes sure the log of log records are flushed
+					if(flush_lsns_to_disk(inputData.tid.toString(),logs) == false)
 					{
-						System.out.println("Logging tid on mysql");
-						java.sql.PreparedStatement preparedStatement = conn.prepareStatement(sql);
-						
-						preparedStatement.setString(1, logs.get(i).tid.toString());
-						preparedStatement.setString(2, logs.get(i).lsn.toString());
-						preparedStatement.setBoolean(3, false);
-						
-						preparedStatement.executeUpdate(); 
+						resultObject.success = false;
+						resultObject.message = "Exception in flushing log of logs to disk";
 					}
 					
 					for(int i=0;i<logs.size();i++)
@@ -605,6 +637,7 @@ public class LoggingService
 					{
 						resultObject.success = true;
 						resultObject.message = "Encountered error in flushing entries";
+						make_transaction_atomic(inputData.tid.toString());
 					}
 					else
 					{
