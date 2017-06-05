@@ -10,10 +10,10 @@ import java.util.UUID;
 public class InputData
 {
 	public String appid ;
-	public UUID tid;
+	public String tid;
 	public String payload;
 	public String logtype;
-	public UUID lsn;
+	public String lsn;
 	public Date starttime;
 	public Date endtime;
 }

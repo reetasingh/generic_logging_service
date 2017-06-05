@@ -57,11 +57,12 @@ public class LoggingService
 	static final String EVENT_LOG = "Event";
 	static final String POLICY_LOG = "Policy";
 	static final String DEVICE_LOG = "Device";
-	static Connection conn = null;	
+	static Connection conn = null;
 	
 	
 	static
 	{
+		SequenceGenerator.initalize();
 		System.out.println("Initializing databases");
 		try
 		{
@@ -136,17 +137,16 @@ public class LoggingService
 	}
 
 
-	/**
+	/*
 	 * @return SuperResultObject
-	 * Method to start a transactional log
-	 */
+	 * Method to start a transactional log	@GET **/
 	@GET
 	@Path("/begin")
 	@Produces(MediaType.APPLICATION_JSON)
 	public SuperResultObject getTid() 
 	{
 		getLogRegion();
-		String tid = java.util.UUID.randomUUID().toString();
+		String tid = SequenceGenerator.getTid();
 		ResultObject resultObject = new ResultObject();
 		try {
 			getTransactionRegion().put(tid.toString(), "");
@@ -297,7 +297,7 @@ public class LoggingService
 			}
 			}
 
-			UUID lsn = java.util.UUID.randomUUID();
+			String lsn = SequenceGenerator.getLsn();
 			Log log = null;
 			String payLoadString = inputdata.payload;
 			Object payLoadObject = SimpleUtil.XML_to_Object(payLoadString);
