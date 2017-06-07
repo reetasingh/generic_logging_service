@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+	<xs:element name="sensor">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="id" type="xs:string"/>
+                <xs:element name="description" type="xs:string" />
+                <xs:element name="name" type="xs:string"/>
+                <xs:element name="sensorIP" type="xs:string"/>
+                <xs:element name="sensorPort" type="xs:string"/>
+                <xs:element name="COVERAGE_ID" type="xs:positiveInteger"/>
+                <xs:element name="LOCATION_ID" type="xs:positiveInteger" />
+                <xs:element name="USER_ID" type="xs:positiveInteger" />
+                <xs:element name="PLATFORM_ID" type="xs:positiveInteger"/>
+                <xs:element name="sensor_type_id" type="xs:positiveInteger"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+</xs:schema>

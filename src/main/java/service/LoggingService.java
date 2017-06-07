@@ -2,6 +2,7 @@ package service;
 
 import util.*;
 
+import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -390,7 +391,7 @@ public class LoggingService
 
 		if(inputData!=null && inputData.lsn != null)
 		{
-			String queryString = "select v from /log.values v where 1=1";
+			String queryString = "select v from /log.values v where 1=1 and v.appid = '" + inputData.appid + "'";
 			queryString = queryString + " and v.lsn = " +  "'" + inputData.lsn + "'";
 			System.out.println(queryString);
 			List <Log> logs = new ArrayList();
@@ -410,7 +411,7 @@ public class LoggingService
 					{
 						Log logObject = tempLogs.get(0);
 						logs.add(logObject);
-						queryString =  "select v from /log.values v where v.lsn = " + "'" + logObject.prev +"'";
+						queryString =  "select v from /log.values v where v.lsn = " + "'" + logObject.prev +"'" + " and v.appid = " +"'" +inputData.appid +"'" ;
 						System.out.println(queryString);
 					}	
 					else
@@ -418,7 +419,8 @@ public class LoggingService
 						cont = false;
 					}
 				} 
-				catch (Exception e) {
+				catch (Exception e)
+				{
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 					cont =false;
@@ -1100,7 +1102,8 @@ public class LoggingService
 		 }
 	}
 
-	private List<Log> query_log_memory(InputData inputdata) {
+	private List<Log> query_log_memory(InputData inputdata) 
+	{
 		List<Log> logs = new ArrayList();
 		String output = "query logs";
 		String result;
@@ -1135,12 +1138,13 @@ public class LoggingService
 				queryString = queryString + " and v.logtype = " + "'"
 						+ inputdata.logtype.toString() + "'";
 			}
+			/*
 			if (inputdata.payload != null && inputdata.payload.length() > 0) 
 			{
 				hasPayload = true;
 				queryString = queryString + " and v.payload = " + "'"
 						+ inputdata.payload.toString() + "'";
-			}
+			}*/
 			/*
 			if ((inputdata.starttime != null && inputdata.starttime.toString()
 					.length() > 0)
@@ -1175,11 +1179,72 @@ public class LoggingService
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
+			if(inputdata.payload !=null)
+			{
+				logs = filter_logs_on_payload_main_memory(logs, inputdata.payload);
+			}
+		} 
 			return logs;
-		} else {
-			return logs;
-		}
+		
 	}
+	
+	private List<Log> filter_logs_on_payload_main_memory(List<Log> logs,String payload_query)
+	{
+		System.out.println("Searching paylaod in main memory");
+		List <Log> result_logs = new ArrayList();
+		Object object_payload_query = SimpleUtil.XML_to_Object(payload_query);
+		for(Log log: logs)
+		{
+			Object log_payload_object = SimpleUtil.XML_to_Object(log.payload);
+			Boolean isMatching = false;
+			if(log_payload_object.getClass().equals(object_payload_query.getClass()))
+			{
+				if(!(log_payload_object instanceof Integer))
+				{
+					for (Field field : object_payload_query.getClass().getDeclaredFields()) 
+					{
+						field.setAccessible(true); 
+						Object value;
+						try
+						{
+							value = field.get(object_payload_query);
+							System.out.println(field.getName() + "=" + value);
+							if (value != null)
+							{
+								if(field.get(log_payload_object).equals(value))
+								{
+									isMatching = true;
+								}
+								else
+								{
+									isMatching = false;
+								}
+					        
+							}
+						} catch (IllegalArgumentException | IllegalAccessException e) 
+						{
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						} 
+				    
+					}
+					if(isMatching)
+					{
+						result_logs.add(log);
+					}
+				}
+				else
+				{
+					if(log.payload.equalsIgnoreCase(payload_query))
+					{
+						result_logs.add(log);
+					}
+				}
+			}
+		}
+		return result_logs;
+	}
+	
 	
 	@POST
 	@Path("/delete")
