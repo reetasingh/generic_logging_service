@@ -33,7 +33,7 @@ public class SimpleUtil
 				return object;
 			}
 			String message = doc.getRootElement().getName();
-			System.out.println("The root Element was " + message);
+			//System.out.println("The root Element was " + message);
 			String className = message.toUpperCase();
 			String newClassName = "com.payload_XML.generatedclasses." + className.substring(0, 1) + message.substring(1);
 			Class payloadclass;
@@ -59,7 +59,7 @@ public class SimpleUtil
 				object = new Integer(300);
 				return object;
 			}
-		System.out.println("Created a object from XML");
+		//System.out.println("Created a object from XML");
 		return object;
 	}
 	
@@ -67,7 +67,7 @@ public class SimpleUtil
 	{
 		GsonBuilder builder = new GsonBuilder();
 		Gson gson = builder.create();
-		System.out.println(gson.toJson(object));
+		//System.out.println(gson.toJson(object));
 		return gson.toJson(object);
 	}
 	
@@ -81,7 +81,7 @@ public class SimpleUtil
 		}
 		try
 		{
-			System.out.println(payload);
+			//System.out.println(payload);
 			GsonBuilder builder = new GsonBuilder();
 			Gson gson = builder.create();
 			GenericJson genericJson = gson.fromJson(payload, GenericJson.class);

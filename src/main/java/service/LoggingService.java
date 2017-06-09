@@ -6,6 +6,7 @@ import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -38,7 +39,6 @@ import org.apache.geode.cache.query.TypeMismatchException;
 import org.apache.geode.pdx.ReflectionBasedAutoSerializer;
 
 import com.mysql.jdbc.PreparedStatement;
-import com.mysql.jdbc.Statement;
 import com.sun.jersey.spi.resource.Singleton;
 
 /**
@@ -178,10 +178,11 @@ public class LoggingService
 	@Path("/write")
 	@Produces(MediaType.APPLICATION_JSON)
 	@Consumes(MediaType.APPLICATION_JSON)
-	public SuperResultObject write_log(InputData inputdata)
+	public SuperResultObject write_log(InputData inputData)
 	{
-		ResultObject result = create_log(inputdata);
-
+		
+		ResultObject result = create_log(inputData);
+		
 		JSONObject jsonObject = new JSONObject();
 		ResultObject resultObject = new ResultObject();
 		SuperResultObject superResultObject = new SuperResultObject();
@@ -412,7 +413,7 @@ public class LoggingService
 						Log logObject = tempLogs.get(0);
 						logs.add(logObject);
 						queryString =  "select v from /log.values v where v.lsn = " + "'" + logObject.prev +"'" + " and v.appid = " +"'" +inputData.appid +"'" ;
-						System.out.println(queryString);
+						//System.out.println(queryString);
 					}	
 					else
 					{
@@ -439,6 +440,7 @@ public class LoggingService
 			{
 				result.success = false;
 				result.message = "Exception in flushing log of logs to disk";
+				return result;
 			}
 			
 			
@@ -515,13 +517,12 @@ public class LoggingService
 	{
 		//First insert lsns that need to be flushed in mysql
 		String sql = "INSERT INTO UNDO_LOG (tid, lsn, flushed)" + "VALUES (?, ?, ?)";
-		
+		/*
 		for(int i=0;i<logs.size();i++)
 		{
-			System.out.println("Logging  lsns on mysql");
 			
-			
-			try {
+			try 
+			{
 				java.sql.PreparedStatement preparedStatement = conn.prepareStatement(sql);
 				preparedStatement.setString(1, key);
 				preparedStatement.setString(2, logs.get(i).lsn.toString());
@@ -534,6 +535,34 @@ public class LoggingService
 				return false;
 			}
 			
+		}*/
+	
+		
+		
+
+		final int batchSize = 1000;
+		int count = 0;
+		try {
+			java.sql.PreparedStatement preparedStatement = conn.prepareStatement(sql);
+		for (Log log: logs) 
+		{
+				preparedStatement.setString(1, key);
+				preparedStatement.setString(2, log.lsn.toString());
+				preparedStatement.setBoolean(3, false);
+				preparedStatement.addBatch();
+			
+			if(++count % batchSize == 0) {
+				preparedStatement.executeBatch();
+			}
+			
+		}
+		preparedStatement.executeBatch(); // insert remaining records
+		preparedStatement.close();
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+			return false;
 		}
 		return true;
 	}
@@ -595,6 +624,7 @@ public class LoggingService
 					{
 						resultObject.success = false;
 						resultObject.message = "Exception in flushing log of logs to disk";
+						return resultObject;
 					}
 					
 					for(int i=0;i<logs.size();i++)
@@ -603,7 +633,7 @@ public class LoggingService
 						String dataInputToMongo = null;
 						Log logObject = logs.get(i);
 						String logJson = SimpleUtil.convert_object_to_JSON(logObject);
-						System.out.println("Log json" + logJson);
+						//System.out.println("Log json" + logJson);
 						
 						Object payLoadObject = SimpleUtil.XML_to_Object(logObject.payload.toString());
 						if(payLoadObject instanceof Integer)
@@ -617,11 +647,11 @@ public class LoggingService
 						else
 						{
 							payLoadJson= SimpleUtil.convert_object_to_JSON(payLoadObject);
-							System.out.println("Payloadjson" + payLoadJson);
+							//System.out.println("Payloadjson" + payLoadJson);
 							dataInputToMongo = logJson.replace("}", "") + payLoadJson.replace("{", ",");
 						}
 						
-						System.out.println("Mongo input" + dataInputToMongo);
+						//System.out.println("Mongo input" + dataInputToMongo);
 						
 						int insertCount = DatabaseService.flush_logs(dataInputToMongo);
 						System.out.println(insertCount);
@@ -644,7 +674,7 @@ public class LoggingService
 					else
 					{
 						resultObject.success = true;
-						resultObject.message = "Successfully flushed " + successfullInsert + " entries";
+						resultObject.message = "Successfully flushed " + logs.size() + " entries";
 						update_tran_status(inputData.tid.toString());
 					}
 					
@@ -707,6 +737,7 @@ public class LoggingService
 					 e1.printStackTrace();
 				 }
 			 }
+			 
 			 update_tran_status(tid);
 		 }
 		 catch(Exception e)
@@ -763,7 +794,7 @@ public class LoggingService
 				List<String> lsns = new ArrayList();
 				try {
 					results = (SelectResults) query.execute();
-					System.out.println(results.size());
+					//System.out.println(results.size());
 					lsns = results.asList();
 					if (lsns.size() == 0) {
 						result.message = "No entry found with tid - "
@@ -799,6 +830,7 @@ public class LoggingService
 		List<Log> logs = new ArrayList();
 		String output = "query logs";
 		String result;
+		List<Log> logObjectList = new ArrayList();
 
 		Boolean hasPayload = false;
 		Boolean hasLogtype = false;
@@ -854,6 +886,7 @@ public class LoggingService
 			String payloadJsonString = null;
 			if(inputdata.payload !=null && inputdata.payload.length() > 0)
 			{
+				System.out.println("in paylaod");
 				hasPayload = true;
 				
 				try
@@ -868,9 +901,11 @@ public class LoggingService
 					else
 					{
 						payloadJsonString = SimpleUtil.convert_object_to_JSON(payLoadObject);
-						System.out.println(payloadJsonString);
+					
+						
 						newPayloadJsonString = payloadJsonString.substring(1,payloadJsonString.length()-1 );
 					}
+					
 
 				} 
 				catch (IllegalArgumentException  e)
@@ -911,9 +946,11 @@ public class LoggingService
 				}
 
 			}
-		}
+			
+		
+		
 		List<org.json.JSONObject> jsonObjectList = DatabaseService.query_db_object(finalString);
-		List<Log> logObjectList = new ArrayList();
+		
 		try
 		{
 			for(org.json.JSONObject jsonObject:jsonObjectList )
@@ -992,6 +1029,7 @@ public class LoggingService
 		{
 			e.printStackTrace();
 		}
+		}
 		return logObjectList;
 	}
 	
@@ -1016,11 +1054,10 @@ public class LoggingService
 		{
 			if((inputdata.lsn !=null && inputdata.lsn.toString().length() >0) || (inputdata.tid!=null && inputdata.tid.toString().length() >0))
 			{
-				System.out.println("Querying main memory");
 				memory_logs = query_log_memory(inputdata);
 				if(memory_logs.size() ==0)
 				{
-					System.out.println("Querying DB memory");
+					//System.out.println("Querying DB memory");
 					logs = query_db(inputdata);
 					save_to_main_memory(logs);
 				}
@@ -1031,7 +1068,7 @@ public class LoggingService
 			}
 			else
 			{
-				System.out.println("Querying DB memory");
+				//System.out.println("Querying DB memory");
 				logs = query_db(inputdata);
 				//There might be data which is not yet flushed to disk, we can try finding that in main memory
 				memory_logs = query_log_memory(inputdata);
@@ -1064,7 +1101,7 @@ public class LoggingService
 	{
 		for(Log log: logs)
 		{
-			System.out.println("Saving data to main memory");
+			//System.out.println("Saving data to main memory");
 			getLogRegion().put(log.lsn.toString(), log);
 		}
 	}
@@ -1072,7 +1109,7 @@ public class LoggingService
 
 	private static void cleanup_service() 
 	{
-		 System.out.println("Calling cleanup service");
+		 //System.out.println("Calling cleanup service");
 		 String query = "SELECT distinct tid FROM UNDO_LOG WHERE flushed = false";
 		 try
 		 {
@@ -1156,7 +1193,7 @@ public class LoggingService
 						+ inputdata.endtime.toString();
 			}*/
 			
-			System.out.println(queryString);
+			//System.out.println(queryString);
 
 			QueryService queryService = getCache().getQueryService();
 
@@ -1190,7 +1227,7 @@ public class LoggingService
 	
 	private List<Log> filter_logs_on_payload_main_memory(List<Log> logs,String payload_query)
 	{
-		System.out.println("Searching paylaod in main memory");
+		//System.out.println("Searching paylaod in main memory");
 		List <Log> result_logs = new ArrayList();
 		Object object_payload_query = SimpleUtil.XML_to_Object(payload_query);
 		for(Log log: logs)
@@ -1208,7 +1245,7 @@ public class LoggingService
 						try
 						{
 							value = field.get(object_payload_query);
-							System.out.println(field.getName() + "=" + value);
+							//System.out.println(field.getName() + "=" + value);
 							if (value != null)
 							{
 								if(field.get(log_payload_object).equals(value))
@@ -1246,7 +1283,7 @@ public class LoggingService
 	}
 	
 	
-	@POST
+	@DELETE
 	@Path("/delete")
 	@Produces(MediaType.APPLICATION_JSON)
 	@Consumes(MediaType.APPLICATION_JSON)
@@ -1336,7 +1373,7 @@ public class LoggingService
 				return result;
 			}
 
-			System.out.println(queryString);
+			//System.out.println(queryString);
 
 			QueryService queryService = getCache().getQueryService();
 
@@ -1442,7 +1479,7 @@ public class LoggingService
 				{
 					Object payLoadObject = SimpleUtil.XML_to_Object(inputdata.payload);
 					String payloadJsonString = SimpleUtil.convert_object_to_JSON(payLoadObject);
-					System.out.println(payloadJsonString);
+					//System.out.println(payloadJsonString);
 					newPayloadJsonString = payloadJsonString.substring(1,payloadJsonString.length()-1 );
 
 				} 
@@ -1451,6 +1488,7 @@ public class LoggingService
 					e.printStackTrace();
 				}
 			}
+			//System.out.println(newPayloadJsonString);
 			//TODO start time and end time
 
 			String myJsonstring = "";

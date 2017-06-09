@@ -114,4 +114,14 @@ public class DatabaseService
 		
 		return deleteCount;
 	}
+	
+	public static void clean_db()
+	{
+		getMongoDB().dropDatabase();
+	}
+	
+	public static void main(String args[])
+	{
+		clean_db();
+	}
 }
